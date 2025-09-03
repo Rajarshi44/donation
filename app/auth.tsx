@@ -2,9 +2,7 @@ import { useAuth, UserRole } from '@/context/AuthContext';
 import { FontAwesome5, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Alert, Dimensions, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-
-const { width } = Dimensions.get('window');
+import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 const colors = {
   primary: '#FF6B35',
@@ -60,9 +58,11 @@ export default function AuthScreen() {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [selectedRole, setSelectedRole] = useState<UserRole>(null);
   const [showPassword, setShowPassword] = useState(false);
-  const { login } = useAuth();
+  const [isLoading, setIsLoading] = useState(false);
+  const { login, register } = useAuth();
   const router = useRouter();
 
   const roles = [
@@ -73,7 +73,6 @@ export default function AuthScreen() {
       icon: 'restaurant',
       iconFamily: 'Ionicons' as const,
       color: colors.primary,
-      demoEmail: 'donor@resqmeal.com'
     },
     {
       role: 'ngo' as UserRole,
@@ -82,7 +81,6 @@ export default function AuthScreen() {
       icon: 'charity',
       iconFamily: 'MaterialCommunityIcons' as const,
       color: colors.success,
-      demoEmail: 'ngo@resqmeal.com'
     },
     {
       role: 'driver' as UserRole,
@@ -91,11 +89,12 @@ export default function AuthScreen() {
       icon: 'truck-fast',
       iconFamily: 'FontAwesome5' as const,
       color: colors.secondary,
-      demoEmail: 'driver@resqmeal.com'
     }
   ];
 
-  const handleAuth = () => {
+  const handleEmailAuth = async () => {
+    console.log('Auth screen: handleEmailAuth called', { isLogin, email, selectedRole, displayName });
+    
     if (!selectedRole) {
       Alert.alert('Please select a role', 'Choose whether you\'re a donor, NGO, or driver to continue.');
       return;
@@ -106,31 +105,51 @@ export default function AuthScreen() {
       return;
     }
 
-    if (isLogin) {
-      const success = login(email, password, selectedRole);
-      if (success) {
-        router.replace('/(tabs)/dashboard');
+    if (!isLogin && !displayName) {
+      Alert.alert('Missing information', 'Please enter your full name.');
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      if (isLogin) {
+        console.log('Auth screen: Attempting email login...');
+        const success = await login(email, password);
+        if (success) {
+          console.log('Auth screen: Email login successful');
+          router.replace('/(tabs)/dashboard');
+        } else {
+          console.log('Auth screen: Email login failed');
+          Alert.alert('Login failed', 'Invalid credentials. Please check your email and password.');
+        }
       } else {
-        Alert.alert('Login failed', 'Invalid credentials. Try password123 for demo accounts.');
+        console.log('Auth screen: Attempting email registration...');
+        const success = await register(email, password, selectedRole, displayName);
+        if (success) {
+          console.log('Auth screen: Email registration successful');
+          Alert.alert(
+            'Account created successfully!', 
+            'Please check your email for verification link. You can still use the app while unverified.',
+            [
+              {
+                text: 'OK',
+                onPress: () => router.replace('/(tabs)/dashboard')
+              }
+            ]
+          );
+        } else {
+          console.log('Auth screen: Email registration failed');
+          Alert.alert('Registration failed', 'Please check your information and try again.');
+        }
       }
-    } else {
-      // Mock signup - in real app, this would create a new account
-      Alert.alert('Account created!', 'Please log in with your new credentials.');
-      setIsLogin(true);
+    } catch (error: any) {
+      console.error('Auth screen: Error during email authentication:', error);
+      Alert.alert('Error', error.message || 'An unexpected error occurred.');
+    } finally {
+      setIsLoading(false);
     }
   };
-
-  const fillDemoCredentials = (role: UserRole) => {
-    const roleData = roles.find(r => r.role === role);
-    if (roleData) {
-      setEmail(roleData.demoEmail);
-      setPassword('password123');
-      setSelectedRole(role);
-    }
-  };
-
-  // Find the selected role's demo email
-  const selectedRoleData = roles.find(r => r.role === selectedRole);
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -141,7 +160,7 @@ export default function AuthScreen() {
       </View>
 
       <View style={styles.authContainer}>
-        <Text style={styles.title}>{isLogin ? 'Welcome Back!' : 'Join ResQMeal'}</Text>
+        <Text style={styles.title}>{isLogin ? 'Welcome Back!' : 'Join ResQMeal!'}</Text>
         <Text style={styles.subtitle}>
           {isLogin ? 'Sign in to continue making a difference' : 'Create your account to start helping'}
         </Text>
@@ -158,12 +177,46 @@ export default function AuthScreen() {
           ))}
         </View>
 
-        {/* Show demo credentials for selected role */}
-        {isLogin && selectedRoleData && (
-          <View style={{ marginBottom: 16, alignItems: 'center', backgroundColor: colors.light, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: colors.shadow }}>
-            <Text style={{ color: colors.dark, fontWeight: 'bold', marginBottom: 2 }}>Demo Credentials</Text>
-            <Text style={{ color: colors.primary }}>Email: <Text style={{ fontWeight: 'bold' }}>{selectedRoleData.demoEmail}</Text></Text>
-            <Text style={{ color: colors.primary }}>Password: <Text style={{ fontWeight: 'bold' }}>password123</Text></Text>
+        {/* Google Sign-In Button (Coming Soon) */}
+        <TouchableOpacity 
+          style={[
+            styles.googleSignInButton, 
+            { 
+              backgroundColor: '#cccccc',
+              opacity: 0.6
+            }
+          ]} 
+          onPress={() => Alert.alert('Coming Soon', 'Google Sign-In will be available in a future update. Please use email/password authentication for now.')}
+          disabled={false}
+        >
+          <Ionicons name="logo-google" size={24} color={colors.white} style={styles.googleIcon} />
+          <Text style={styles.authButtonText}>
+            Sign in with Google (Coming Soon)
+          </Text>
+        </TouchableOpacity>
+
+        {/* Divider */}
+        <View style={styles.divider}>
+          <View style={styles.dividerLine} />
+          <Text style={styles.dividerText}>OR</Text>
+          <View style={styles.dividerLine} />
+        </View>
+
+        {/* Email/Password Form */}
+        {!isLogin && (
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>Full Name</Text>
+            <View style={styles.inputWrapper}>
+              <Ionicons name="person-outline" size={20} color={colors.dark} style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="Enter your full name"
+                placeholderTextColor={colors.shadow}
+                value={displayName}
+                onChangeText={setDisplayName}
+                autoCapitalize="words"
+              />
+            </View>
           </View>
         )}
 
@@ -208,23 +261,25 @@ export default function AuthScreen() {
           </View>
         </View>
 
+        {/* Email/Password Auth Button */}
         <TouchableOpacity 
           style={[
             styles.authButton, 
             { 
               backgroundColor: selectedRole ? 
                 roles.find(r => r.role === selectedRole)?.color : colors.dark,
-              opacity: selectedRole ? 1 : 0.7
+              opacity: (selectedRole && !isLoading) ? 1 : 0.7
             }
           ]} 
-          onPress={handleAuth}
-          disabled={!selectedRole}
+          onPress={handleEmailAuth}
+          disabled={!selectedRole || isLoading}
         >
           <Text style={styles.authButtonText}>
-            {isLogin ? 'Sign In' : 'Create Account'}
+            {isLoading ? 'Please wait...' : (isLogin ? 'Sign In with Email' : 'Create Account')}
           </Text>
         </TouchableOpacity>
 
+        {/* Switch between Login/Register */}
         <TouchableOpacity 
           onPress={() => setIsLogin(!isLogin)}
           style={styles.switchButton}
@@ -237,21 +292,15 @@ export default function AuthScreen() {
           </Text>
         </TouchableOpacity>
 
-        <View style={styles.demoSection}>
-          <Text style={styles.demoTitle}>Quick Demo Access</Text>
-          <View style={styles.demoButtons}>
-            {roles.map((roleData) => (
-              <TouchableOpacity
-                key={`demo-${roleData.role}`}
-                style={[styles.demoButton, { borderColor: roleData.color }]}
-                onPress={() => fillDemoCredentials(roleData.role)}
-              >
-                <Text style={[styles.demoButtonText, { color: roleData.color }]}>
-                  Demo {roleData.title}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+        {/* Info Section */}
+        <View style={styles.infoSection}>
+          <Text style={styles.infoTitle}>Authentication Options</Text>
+          <Text style={styles.infoText}>
+            • Email/Password: Secure and reliable{'\n'}
+            • All your data is encrypted and protected{'\n'}
+            • Quick and easy account creation{'\n'}
+            • Choose what works best for you
+          </Text>
         </View>
       </View>
     </ScrollView>
@@ -421,39 +470,68 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: colors.primary,
   },
-  demoSection: {
+  // Divider styles
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E0E0E0',
+  },
+  dividerText: {
+    marginHorizontal: 10,
+    color: '#666',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  forgotPasswordButton: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  forgotPasswordText: {
+    fontSize: 14,
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  googleSignInButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 56,
+    borderRadius: 16,
+    marginBottom: 20,
+    elevation: 4,
+    shadowColor: colors.dark,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+  },
+  googleIcon: {
+    marginRight: 12,
+  },
+  infoSection: {
     backgroundColor: colors.white,
     borderRadius: 16,
     padding: 20,
+    marginBottom: 20,
     elevation: 2,
     shadowColor: colors.dark,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
   },
-  demoTitle: {
+  infoTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: colors.dark,
-    textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
-  demoButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  demoButton: {
-    flex: 1,
-    marginHorizontal: 4,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    alignItems: 'center',
-  },
-  demoButtonText: {
-    fontSize: 12,
-    fontWeight: '600',
-    textAlign: 'center',
+  infoText: {
+    fontSize: 14,
+    color: colors.shadow,
+    lineHeight: 20,
   },
 });
